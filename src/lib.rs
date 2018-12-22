@@ -1,5 +1,5 @@
 use serde_derive::Deserialize;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::IpAddr;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
 
@@ -62,13 +62,12 @@ impl DNSBL {
             )
             .map_err(|e| format!("error making query: {}", e))?;
         let records = match res.messages().into_iter().next() {
-            Some(msg) => msg.answers()
+            Some(msg) => msg
+                .answers()
                 .into_iter()
-                .map(|a| {
-                    match a.rdata() {
-                        trust_dns::rr::RData::A(ip) => ip.to_owned(),
-                        _ => panic!("A record request did not get a record response"),
-                    }
+                .map(|a| match a.rdata() {
+                    trust_dns::rr::RData::A(ip) => ip.to_owned(),
+                    _ => panic!("A record request did not get a record response"),
                 })
                 .collect::<Vec<_>>(),
             None => {
@@ -106,21 +105,26 @@ impl DNSBL {
                         .join("\n"),
                     _ => panic!("txt request did not get txt response"),
                 })
-                .collect::<Vec<_>>().join("\n"),
+                .collect::<Vec<_>>()
+                .join("\n"),
             None => {
                 return Err("no messages".to_string());
             }
         };
 
-        let records = records.into_iter()
+        let records = records
+            .into_iter()
             .map(|record| {
                 if !record.is_loopback() {
-                    Err(format!("returned record was not loopback; dnsbl results should be loopback: {}", record))
+                    Err(format!(
+                        "returned record was not loopback; dnsbl results should be loopback: {}",
+                        record
+                    ))
                 } else {
                     Ok(record.octets()[3])
                 }
             })
-            .collect::<Result<Vec<_>,_>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(CheckResult {
             reason: reason,

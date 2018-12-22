@@ -1,8 +1,8 @@
-use clap::{Arg, App, crate_version, ArgMatches};
-use std::collections::{HashSet, HashMap};
-use serde_derive::Deserialize;
+use clap::{crate_version, App, Arg, ArgMatches};
 use dnsbl::DNSBL;
 use log::{debug, info, warn};
+use serde_derive::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use trust_dns::client::SyncClient;
 use trust_dns::udp::UdpClientConnection;
@@ -49,15 +49,19 @@ impl IPSet {
 fn main() -> Result<(), String> {
     let matches = App::new("dnsbl-check")
         .version(crate_version!())
-        .arg(Arg::with_name("debug")
-             .help("debug output, default false")
-             .short("d"))
-        .arg(Arg::with_name("file")
-             .long("file")
-             .short("f")
-             .takes_value(true)
-             .help("Input yaml file to use")
-        ).get_matches();
+        .arg(
+            Arg::with_name("debug")
+                .help("debug output, default false")
+                .short("d"),
+        )
+        .arg(
+            Arg::with_name("file")
+                .long("file")
+                .short("f")
+                .takes_value(true)
+                .help("Input yaml file to use"),
+        )
+        .get_matches();
     let mut input = Input::new();
 
     if let Some(filename) = matches.value_of("file") {
@@ -65,7 +69,7 @@ fn main() -> Result<(), String> {
     }
     input.merge(load_from_flags(&matches)?);
 
-    { 
+    {
         let debug = matches.is_present("debug");
         let mut builder = env_logger::Builder::from_default_env();
         if debug {
@@ -90,11 +94,12 @@ fn main() -> Result<(), String> {
     for ip in &input.ips.good {
         for dnsbl in &input.dnsbls {
             // TODO: format dnsbl properly
-            let res = dnsbl.check_ip(&client, ip)
+            let res = dnsbl
+                .check_ip(&client, ip)
                 .map_err(|e| format!("Error lookup up '{}' on '{:?}'", ip, dnsbl))?;
             if res.listed() {
                 println!("Good ip {} is listed on {:?}", ip, dnsbl);
-                false_positives+=1;
+                false_positives += 1;
             }
         }
     }
@@ -102,7 +107,8 @@ fn main() -> Result<(), String> {
     for ip in &input.ips.bad {
         for dnsbl in &input.dnsbls {
             // TODO: format dnsbl properly
-            let res = dnsbl.check_ip(&client, ip)
+            let res = dnsbl
+                .check_ip(&client, ip)
                 .map_err(|e| format!("Error lookup up '{}' on '{:?}'", ip, dnsbl))?;
             if !res.listed() {
                 false_negatives += 1;
@@ -114,8 +120,8 @@ fn main() -> Result<(), String> {
 }
 
 fn load_input_file(filename: &str) -> Result<Input, String> {
-    let f = std::fs::File::open(filename)
-        .map_err(|e| format!("Could not open input file: {}", e))?;
+    let f =
+        std::fs::File::open(filename).map_err(|e| format!("Could not open input file: {}", e))?;
 
     let input: Input = serde_yaml::from_reader(f)
         .map_err(|e| format!("Could not parse input file as yaml: {}", e))?;
@@ -143,20 +149,31 @@ fn parse_bl(flag: &str) -> Result<DNSBL, String> {
             let records = parts[3]
                 .split(",")
                 .map(|record| record.parse::<u8>())
-                .collect::<Result<Vec<_>,_>>()
-                .map_err(|err| format!("malformed record, must be a single octet in decimal: {}", err))?;
-            Ok(DNSBL::new(parts[0].to_string(), parts[1].to_string(), records))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|err| {
+                    format!(
+                        "malformed record, must be a single octet in decimal: {}",
+                        err
+                    )
+                })?;
+            Ok(DNSBL::new(
+                parts[0].to_string(),
+                parts[1].to_string(),
+                records,
+            ))
         }
         // 2 parts: 'name:host'
-        2 => {
-            Ok(DNSBL::new(parts[0].to_string(), parts[1].to_string(), Vec::new()))
-        }
+        2 => Ok(DNSBL::new(
+            parts[0].to_string(),
+            parts[1].to_string(),
+            Vec::new(),
+        )),
         // 1 part: 'host'
-        1 => {
-            Ok(DNSBL::new("".to_string(), parts[0].to_string(), Vec::new()))
-        }
-        _ => {
-            Err(format!("could not parse '{}'; expected 1 to 3 colon-separated parts, not {}", flag, parts.len()))
-        }
+        1 => Ok(DNSBL::new("".to_string(), parts[0].to_string(), Vec::new())),
+        _ => Err(format!(
+            "could not parse '{}'; expected 1 to 3 colon-separated parts, not {}",
+            flag,
+            parts.len()
+        )),
     }
 }
