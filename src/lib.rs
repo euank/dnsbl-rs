@@ -1,3 +1,4 @@
+use std::fmt;
 use serde_derive::Deserialize;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -10,9 +11,31 @@ pub struct DNSBL {
     records: Vec<u8>,
 }
 
+impl fmt::Display for DNSBL {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.name == "" {
+            write!(f, "{}", self.host)
+        } else {
+            write!(f, "{}", self.name)
+        }
+    }
+}
+
 pub struct CheckResult {
     reason: String,
     records: Vec<u8>,
+}
+
+impl fmt::Display for CheckResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if !self.listed() {
+            return write!(f, "not listed");
+        }
+        if self.reason != "" {
+            write!(f, "{} ", self.reason)?;
+        }
+	write!(f, "({})", self.records.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","))
+    }
 }
 
 impl CheckResult {
@@ -74,6 +97,26 @@ impl DNSBL {
                 return Err("no messages".to_string());
             }
         };
+        let mut records = records
+            .into_iter()
+            .map(|record| {
+                if !record.is_loopback() {
+                    Err(format!(
+                        "returned record was not loopback; dnsbl results should be loopback: {}",
+                        record
+                    ))
+                } else {
+                    Ok(record.octets()[3])
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // if the dnsbl is configured to only respect certain records, filter now
+        if self.records.len() > 0 {
+            records = records.into_iter().filter(|record| {
+                self.records.contains(record)
+            }).collect();
+        }
         if records.len() == 0 {
             // not listed
             return Ok(CheckResult {
@@ -82,7 +125,6 @@ impl DNSBL {
             });
         }
         // listed, let's get the reason
-        //
         let res = client
             .query(
                 &trust_dns::rr::Name::from_str(&dnsbl_string).map_err(|err| {
@@ -111,20 +153,6 @@ impl DNSBL {
                 return Err("no messages".to_string());
             }
         };
-
-        let records = records
-            .into_iter()
-            .map(|record| {
-                if !record.is_loopback() {
-                    Err(format!(
-                        "returned record was not loopback; dnsbl results should be loopback: {}",
-                        record
-                    ))
-                } else {
-                    Ok(record.octets()[3])
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(CheckResult {
             reason: reason,

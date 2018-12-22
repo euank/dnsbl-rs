@@ -96,9 +96,9 @@ fn main() -> Result<(), String> {
             // TODO: format dnsbl properly
             let res = dnsbl
                 .check_ip(&client, ip)
-                .map_err(|e| format!("Error lookup up '{}' on '{:?}'", ip, dnsbl))?;
+                .map_err(|e| format!("Error lookup up '{}' on '{}': {}", ip, dnsbl, e))?;
             if res.listed() {
-                println!("Good ip {} is listed on {:?}", ip, dnsbl);
+                println!("Good ip {} is listed on {}: {}", ip, dnsbl, res);
                 false_positives += 1;
             }
         }
@@ -106,10 +106,9 @@ fn main() -> Result<(), String> {
 
     for ip in &input.ips.bad {
         for dnsbl in &input.dnsbls {
-            // TODO: format dnsbl properly
             let res = dnsbl
                 .check_ip(&client, ip)
-                .map_err(|e| format!("Error lookup up '{}' on '{:?}'", ip, dnsbl))?;
+                .map_err(|e| format!("Error lookup up '{}' on '{}': {}", ip, dnsbl, e))?;
             if !res.listed() {
                 false_negatives += 1;
             }
