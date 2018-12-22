@@ -1,0 +1,11 @@
+dnsbls:
+- name: efnet # optional, defaults to 'host', only used for display purposes
+  host: rbl.efnetrbl.org
+  records: [1,2,3,5] # default, everything
+ips:
+  good:
+  - "173.239.232.93"
+  bad:
+  - "3.4.5.6"
+  unknown:
+  - "173.239.232.93"
