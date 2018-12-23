@@ -11,10 +11,9 @@ The `dnsbl_checker` binary may be used to check an ip against a dnsbl.
 ```
 dnsbl_checker --dnsbl "efnet:rbl.efnetrbl.org:1,2,3,5" \
               --dnsbl "sbl.spamhaus.org" \
-              --dnsbl "sbl.spamhaus.org" \
               --good-ip "1.5.6.7" \
               --bad-ip "1.7.8.9" \
-              --check "1.2.3.4"
+              --check-ip "1.2.3.4"
 ```
 
 The checker may also optionally take a `--file` flag which takes a yaml file formatted as the following.

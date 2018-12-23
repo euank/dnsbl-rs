@@ -61,6 +61,38 @@ fn main() -> Result<(), String> {
                 .takes_value(true)
                 .help("Input yaml file to use"),
         )
+        .arg(
+            Arg::with_name("dnsbl")
+                .long("dnsbl")
+                .multiple(true)
+                .short("l")
+                .takes_value(true)
+                .help("a dnsbl to check"),
+        )
+        .arg(
+            Arg::with_name("good-ip")
+                .multiple(true)
+                .long("good-ip")
+                .short("g")
+                .takes_value(true)
+                .help("A known-good ip"),
+        )
+        .arg(
+            Arg::with_name("bad-ip")
+                .multiple(true)
+                .long("bad-ip")
+                .short("b")
+                .takes_value(true)
+                .help("A known-bad ip"),
+        )
+        .arg(
+            Arg::with_name("check-ip")
+                .multiple(true)
+                .long("check-ip")
+                .short("c")
+                .takes_value(true)
+                .help("An ip of unknown quality"),
+        )
         .get_matches();
     let mut input = Input::new();
 
@@ -136,6 +168,27 @@ fn load_from_flags(matches: &ArgMatches) -> Result<Input, String> {
             input.dnsbls.insert(bl);
         }
     }
+    if let Some(good_ips) = matches.values_of("good-ip") {
+        for ip in good_ips {
+            let ip = ip.parse()
+                .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
+            input.ips.good.insert(ip);
+        }
+    }
+    if let Some(bad_ips) = matches.values_of("bad-ip") {
+        for ip in bad_ips {
+            let ip = ip.parse()
+                .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
+            input.ips.bad.insert(ip);
+        }
+    }
+    if let Some(check_ips) = matches.values_of("check-ip") {
+        for ip in check_ips {
+            let ip = ip.parse()
+                .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
+            input.ips.unknown.insert(ip);
+        }
+    }
 
     Ok(input)
 }
@@ -145,7 +198,7 @@ fn parse_bl(flag: &str) -> Result<DNSBL, String> {
     match parts.len() {
         // 3 parts: 'name:host:record,record,record'
         3 => {
-            let records = parts[3]
+            let records = parts[2]
                 .split(",")
                 .map(|record| record.parse::<u8>())
                 .collect::<Result<Vec<_>, _>>()
