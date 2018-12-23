@@ -3,6 +3,7 @@ name = "dnsbl"
 version = "0.1.0"
 authors = ["Euan Kemp <euank@euank.com>"]
 edition = "2018"
+license = "MIT"
 
 [lib]
 name = "dnsbl"
