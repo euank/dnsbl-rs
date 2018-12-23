@@ -4,7 +4,7 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
 
-#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Hash, PartialEq, Eq)]
 pub struct DNSBL {
     name: String,
     host: String,
@@ -21,6 +21,7 @@ impl fmt::Display for DNSBL {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct CheckResult {
     reason: String,
     records: Vec<u8>,

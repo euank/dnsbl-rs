@@ -1,5 +1,5 @@
 use clap::{crate_version, App, Arg, ArgMatches};
-use dnsbl::DNSBL;
+use dnsbl::{DNSBL, CheckResult};
 use log::{debug, info, warn};
 use serde_derive::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -25,6 +25,7 @@ impl Input {
     }
 }
 
+
 #[derive(Debug, Deserialize, Default)]
 struct IPSet {
     good: HashSet<std::net::IpAddr>,
@@ -43,6 +44,32 @@ impl IPSet {
         for el in rhs.unknown {
             self.unknown.insert(el);
         }
+    }
+
+    fn union(&self) -> Vec<&std::net::IpAddr> {
+        let mut res: Vec<_> = self.good.union(&self.bad).collect();
+        for ip in &self.unknown {
+            res.push(ip)
+        }
+        res
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        // Validate that 'good', 'bad', and 'unknown' are fully disjoint.
+        // Anything else would be silly and is likely a user error.
+        let goodbad: Vec<_> = self.good.intersection(&self.bad).collect();
+        if goodbad.len() != 0 {
+            return Err(format!("'good' and 'bad' ips must be disjoint; shared '{}'", goodbad.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+        }
+        let goodunknown: Vec<_> = self.good.intersection(&self.unknown).collect();
+        if goodunknown.len() != 0 {
+            return Err(format!("'good' and 'check' ips must be disjoint; shared '{}'", goodunknown.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+        }
+        let badunknown: Vec<_> = self.bad.intersection(&self.unknown).collect();
+        if badunknown.len() != 0 {
+            return Err(format!("'bad' and 'check' ips must be disjoint; shared '{}'", badunknown.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+        }
+        Ok(())
     }
 }
 
@@ -117,34 +144,22 @@ fn main() -> Result<(), String> {
     let conn = UdpClientConnection::new(resolver).unwrap();
     let client = SyncClient::new(conn);
 
-    // TODO: this is not the right long term way to structure this, rewrite into something better
-    // abstracted
-    let mut false_positives = 0;
-    let mut false_negatives = 0;
-    let mut check_hits = 0;
+    input.ips.validate()?;
 
-    for ip in &input.ips.good {
+    let mut results: HashMap<std::net::IpAddr, Vec<(DNSBL, CheckResult)>> = Default::default();
+
+    for ip in input.ips.union() {
+        let mut listings = Vec::new();
         for dnsbl in &input.dnsbls {
-            // TODO: format dnsbl properly
             let res = dnsbl
                 .check_ip(&client, ip)
                 .map_err(|e| format!("Error lookup up '{}' on '{}': {}", ip, dnsbl, e))?;
             if res.listed() {
-                println!("Good ip {} is listed on {}: {}", ip, dnsbl, res);
-                false_positives += 1;
+                debug!("Good ip {} is listed on {}: {}", ip, dnsbl, res);
+                listings.push((dnsbl.clone(), res));
             }
         }
-    }
-
-    for ip in &input.ips.bad {
-        for dnsbl in &input.dnsbls {
-            let res = dnsbl
-                .check_ip(&client, ip)
-                .map_err(|e| format!("Error lookup up '{}' on '{}': {}", ip, dnsbl, e))?;
-            if !res.listed() {
-                false_negatives += 1;
-            }
-        }
+        results.insert(*ip, listings);
     }
 
     Ok(())
