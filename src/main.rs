@@ -1,6 +1,7 @@
 use clap::{crate_version, App, Arg, ArgMatches};
 use dnsbl::{DNSBL, CheckResult};
 use log::{debug, info, warn};
+use std::io::Write;
 use serde_derive::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -46,6 +47,10 @@ impl IPSet {
         }
     }
 
+    fn len(&self) -> usize {
+        self.good.len() + self.bad.len() + self.unknown.len()
+    }
+
     fn union(&self) -> Vec<&std::net::IpAddr> {
         let mut res: Vec<_> = self.good.union(&self.bad).collect();
         for ip in &self.unknown {
@@ -78,7 +83,7 @@ fn main() -> Result<(), String> {
         .version(crate_version!())
         .arg(
             Arg::with_name("debug")
-                .help("debug output, default false")
+                .help("verbose output, default false")
                 .short("d"),
         )
         .arg(
@@ -128,8 +133,8 @@ fn main() -> Result<(), String> {
     }
     input.merge(load_from_flags(&matches)?);
 
+    let debug = matches.is_present("debug");
     {
-        let debug = matches.is_present("debug");
         let mut builder = env_logger::Builder::from_default_env();
         if debug {
             builder.filter_module("dnsbl", log::LevelFilter::Debug);
@@ -155,12 +160,12 @@ fn main() -> Result<(), String> {
                 .check_ip(&client, ip)
                 .map_err(|e| format!("Error lookup up '{}' on '{}': {}", ip, dnsbl, e))?;
             if res.listed() {
-                debug!("Good ip {} is listed on {}: {}", ip, dnsbl, res);
                 listings.push((dnsbl.clone(), res));
             }
         }
         results.insert(*ip, listings);
     }
+    print_stats(debug, &input.ips, results);
 
     Ok(())
 }
@@ -242,5 +247,29 @@ fn parse_bl(flag: &str) -> Result<DNSBL, String> {
             flag,
             parts.len()
         )),
+    }
+}
+
+fn print_stats(debug: bool, ips: &IPSet, results: HashMap<IpAddr, Vec<(DNSBL, CheckResult)>>) {
+    let banned: Vec<_> = results.iter().filter(|(_, val)| val.len() > 0).collect();
+    let false_positives: Vec<_> = banned.iter().filter(|(key, _)| ips.good.contains(key)).collect();
+    let missed_bad: Vec<_> = banned.iter().filter(|(key, _)| ips.good.contains(key)).collect();
+
+    let mut tw = tabwriter::TabWriter::new(Vec::new());
+    tw.write_all(format!("Statistics:
+
+Total ips\t{total}
+Listed ips\t{listed}\t{listed_p}%
+False positives\t{false_positives}\t{false_positives_p}%",
+total=ips.len(),
+listed=banned.len(),
+listed_p=(banned.len() * 100) as f64 / ips.len() as f64,
+false_positives=false_positives.len(),
+false_positives_p=(false_positives.len() * 100) as f64 / ips.good.len() as f64
+).as_bytes()).unwrap();
+    println!("{}", String::from_utf8(tw.into_inner().unwrap()).unwrap());
+
+    if debug {
+        println!("\nFalse positive ips:\n{}", false_positives.iter().map(|(ip, _)| ip.to_string()).collect::<Vec<_>>().join("\n"));
     }
 }

@@ -17,4 +17,4 @@ clap = "2"
 log = "0.4"
 env_logger = "0.6"
 trust-dns = "0.15.0"
-
+tabwriter = "1"
