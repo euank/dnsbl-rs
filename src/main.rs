@@ -150,6 +150,9 @@ fn main() -> Result<(), String> {
     let client = SyncClient::new(conn);
 
     input.ips.validate()?;
+    if input.dnsbls.len() == 0 || input.ips.len() == 0 {
+        return Err("At least one dnsbl or ip must be provided".to_string());
+    }
 
     let mut results: HashMap<std::net::IpAddr, Vec<(DNSBL, CheckResult)>> = Default::default();
 
