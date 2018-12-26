@@ -255,20 +255,24 @@ fn parse_bl(flag: &str) -> Result<DNSBL, String> {
 
 fn print_stats(debug: bool, ips: &IPSet, results: HashMap<IpAddr, Vec<(DNSBL, CheckResult)>>) {
     let banned: Vec<_> = results.iter().filter(|(_, val)| val.len() > 0).collect();
+    let not_banned: Vec<_> = results.iter().filter(|(_, val)| val.len() == 0).collect();
     let false_positives: Vec<_> = banned.iter().filter(|(key, _)| ips.good.contains(key)).collect();
-    let missed_bad: Vec<_> = banned.iter().filter(|(key, _)| ips.good.contains(key)).collect();
+    let false_negatives: Vec<_> = not_banned.iter().filter(|(key, _)| ips.bad.contains(key)).collect();
 
     let mut tw = tabwriter::TabWriter::new(Vec::new());
     tw.write_all(format!("Statistics:
 
 Total ips\t{total}
 Listed ips\t{listed}\t{listed_p}%
-False positives\t{false_positives}\t{false_positives_p}%",
+False positives\t{false_positives}\t{false_positives_p}%
+False negatives\t{false_negatives}\t{false_negatives_p}%",
 total=ips.len(),
 listed=banned.len(),
 listed_p=(banned.len() * 100) as f64 / ips.len() as f64,
 false_positives=false_positives.len(),
-false_positives_p=(false_positives.len() * 100) as f64 / ips.good.len() as f64
+false_positives_p=(false_positives.len() * 100) as f64 / ips.good.len() as f64,
+false_negatives=false_negatives.len(),
+false_negatives_p=(false_negatives.len() * 100) as f64 / ips.good.len() as f64,
 ).as_bytes()).unwrap();
     println!("{}", String::from_utf8(tw.into_inner().unwrap()).unwrap());
 
