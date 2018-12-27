@@ -174,13 +174,37 @@ fn reverse_ip(ip: &IpAddr) -> String {
             octet_strs.join(".")
         }
         IpAddr::V6(ip) => {
-            let mut octet_strs = ip
+            // ipv6 is formatted as dotted-nibbles for lookup
+            let mut nibble_strs = ip
                 .octets()
                 .iter()
-                .map(|o| o.to_string())
+                .map(|o| format!("{:x}.{:x}", o & 0x0f, o >> 4)) // extract both nibbles
                 .collect::<Vec<_>>();
-            octet_strs.reverse();
-            octet_strs.join(".")
+            nibble_strs.reverse();
+            nibble_strs.join(".")
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use std::net::IpAddr;
+    use super::reverse_ip;
+    #[test]
+    fn test_reverse_ips() {
+        let testcases: HashMap<_, _> =
+        [
+            ("1.2.3.4", "4.3.2.1"),
+            ("127.0.0.1", "1.0.0.127"),
+            ("2001:DB8:abc:123::42", "2.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3.2.1.0.c.b.a.0.8.b.d.0.1.0.0.2"),
+        ].into_iter().cloned().collect();
+
+        for (ip, reversed) in testcases {
+            let ip: IpAddr = ip.parse().expect(&format!("error parsing {}", ip));
+            assert_eq!(reverse_ip(&ip), reversed);
+        }
+
+    }
+}
+
