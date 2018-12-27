@@ -1,0 +1,15 @@
+language: rust
+branches:
+  only:
+  - master
+  - dev
+os:
+- linux
+- osx
+rust:
+- stable
+- nightly
+
+script:
+- cargo build --verbose --examples
+- cargo test
