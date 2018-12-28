@@ -1,8 +1,10 @@
 use serde_derive::Deserialize;
+use failure::Fail;
 use std::fmt;
 use std::net::IpAddr;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
+use trust_dns_proto::error::ProtoError;
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq, Eq)]
 pub struct DNSBL {
@@ -59,6 +61,18 @@ impl CheckResult {
     }
 }
 
+#[derive(Debug, Fail)]
+pub enum CheckError {
+    #[fail(display = "DNS query error")]
+    DNSQueryError(#[fail(cause)] trust_dns::error::ClientError),
+    #[fail(display = "DNS proto error")]
+    DNSProtoError(#[fail(cause)] ProtoError),
+    #[fail(display = "No DNS records returned")]
+    EmptyRecordResponse,
+    #[fail(display = "A record lookup returned non-loopback ip")]
+    NonLoopbackResponse,
+}
+
 impl DNSBL {
     pub fn new(name: String, host: String, records: Vec<u8>) -> Self {
         let name = if name == "" { host.to_string() } else { name };
@@ -74,7 +88,7 @@ impl DNSBL {
         &self,
         client: &SyncClient<trust_dns::udp::UdpClientConnection>,
         ip: &IpAddr,
-    ) -> Result<CheckResult, String> {
+    ) -> Result<CheckResult, CheckError> {
         // This is the artificial hostname to lookup in a dnsbl in order to get a result.
         // See https://tools.ietf.org/html/rfc5782#section-2
         let dnsbl_string = format!("{}.{}", reverse_ip(ip), self.host,);
@@ -87,12 +101,12 @@ impl DNSBL {
         let res = client
             .query(
                 &trust_dns::rr::Name::from_str(&dnsbl_string).map_err(|err| {
-                    format!("malformed dnsbl host string '{}': {}", dnsbl_string, err)
+                    CheckError::DNSProtoError(err)
                 })?,
                 trust_dns::rr::DNSClass::IN,
                 trust_dns::rr::RecordType::A,
             )
-            .map_err(|e| format!("error making query: {}", e))?;
+            .map_err(|e| CheckError::DNSQueryError(e))?;
         let records = match res.messages().into_iter().next() {
             Some(msg) => msg
                 .answers()
@@ -103,17 +117,14 @@ impl DNSBL {
                 })
                 .collect::<Vec<_>>(),
             None => {
-                return Err("no messages".to_string());
+                return Err(CheckError::EmptyRecordResponse);
             }
         };
         let mut records = records
             .into_iter()
             .map(|record| {
                 if !record.is_loopback() {
-                    Err(format!(
-                        "returned record was not loopback; dnsbl results should be loopback: {}",
-                        record
-                    ))
+                    Err(CheckError::NonLoopbackResponse)
                 } else {
                     Ok(record.octets()[3])
                 }
@@ -138,12 +149,12 @@ impl DNSBL {
         let res = client
             .query(
                 &trust_dns::rr::Name::from_str(&dnsbl_string).map_err(|err| {
-                    format!("malformed dnsbl host string '{}': {}", dnsbl_string, err)
+                    CheckError::DNSProtoError(err)
                 })?,
                 trust_dns::rr::DNSClass::IN,
                 trust_dns::rr::RecordType::TXT,
             )
-            .map_err(|e| format!("error making query: {}", e))?;
+            .map_err(|e| CheckError::DNSQueryError(e))?;
         let reason = match res.messages().next() {
             Some(msg) => msg
                 .answers()
@@ -160,7 +171,7 @@ impl DNSBL {
                 .collect::<Vec<_>>()
                 .join("\n"),
             None => {
-                return Err("no messages".to_string());
+                return Err(CheckError::EmptyRecordResponse);
             }
         };
 
