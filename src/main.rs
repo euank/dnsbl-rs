@@ -272,7 +272,7 @@ listed_p=(banned.len() * 100) as f64 / ips.len() as f64,
 false_positives=false_positives.len(),
 false_positives_p=(false_positives.len() * 100) as f64 / ips.good.len() as f64,
 false_negatives=false_negatives.len(),
-false_negatives_p=(false_negatives.len() * 100) as f64 / ips.good.len() as f64,
+false_negatives_p=(false_negatives.len() * 100) as f64 / ips.bad.len() as f64,
 ).as_bytes()).unwrap();
     println!("{}", String::from_utf8(tw.into_inner().unwrap()).unwrap());
 
