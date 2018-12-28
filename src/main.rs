@@ -1,9 +1,9 @@
 use clap::{crate_version, App, Arg, ArgMatches};
-use dnsbl::{DNSBL, CheckResult};
+use dnsbl::{CheckResult, DNSBL};
 use log::{debug, info, warn};
-use std::io::Write;
 use serde_derive::Deserialize;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use trust_dns::client::SyncClient;
 use trust_dns::udp::UdpClientConnection;
@@ -25,7 +25,6 @@ impl Input {
         self.ips.merge(rhs.ips);
     }
 }
-
 
 #[derive(Debug, Deserialize, Default)]
 struct IPSet {
@@ -64,15 +63,36 @@ impl IPSet {
         // Anything else would be silly and is likely a user error.
         let goodbad: Vec<_> = self.good.intersection(&self.bad).collect();
         if goodbad.len() != 0 {
-            return Err(format!("'good' and 'bad' ips must be disjoint; shared '{}'", goodbad.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+            return Err(format!(
+                "'good' and 'bad' ips must be disjoint; shared '{}'",
+                goodbad
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         let goodunknown: Vec<_> = self.good.intersection(&self.unknown).collect();
         if goodunknown.len() != 0 {
-            return Err(format!("'good' and 'check' ips must be disjoint; shared '{}'", goodunknown.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+            return Err(format!(
+                "'good' and 'check' ips must be disjoint; shared '{}'",
+                goodunknown
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         let badunknown: Vec<_> = self.bad.intersection(&self.unknown).collect();
         if badunknown.len() != 0 {
-            return Err(format!("'bad' and 'check' ips must be disjoint; shared '{}'", badunknown.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+            return Err(format!(
+                "'bad' and 'check' ips must be disjoint; shared '{}'",
+                badunknown
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         Ok(())
     }
@@ -193,21 +213,24 @@ fn load_from_flags(matches: &ArgMatches) -> Result<Input, String> {
     }
     if let Some(good_ips) = matches.values_of("good-ip") {
         for ip in good_ips {
-            let ip = ip.parse()
+            let ip = ip
+                .parse()
                 .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
             input.ips.good.insert(ip);
         }
     }
     if let Some(bad_ips) = matches.values_of("bad-ip") {
         for ip in bad_ips {
-            let ip = ip.parse()
+            let ip = ip
+                .parse()
                 .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
             input.ips.bad.insert(ip);
         }
     }
     if let Some(check_ips) = matches.values_of("check-ip") {
         for ip in check_ips {
-            let ip = ip.parse()
+            let ip = ip
+                .parse()
                 .map_err(|e| format!("invalid ip '{}': {}", ip, e))?;
             input.ips.unknown.insert(ip);
         }
@@ -256,27 +279,45 @@ fn parse_bl(flag: &str) -> Result<DNSBL, String> {
 fn print_stats(debug: bool, ips: &IPSet, results: HashMap<IpAddr, Vec<(DNSBL, CheckResult)>>) {
     let banned: Vec<_> = results.iter().filter(|(_, val)| val.len() > 0).collect();
     let not_banned: Vec<_> = results.iter().filter(|(_, val)| val.len() == 0).collect();
-    let false_positives: Vec<_> = banned.iter().filter(|(key, _)| ips.good.contains(key)).collect();
-    let false_negatives: Vec<_> = not_banned.iter().filter(|(key, _)| ips.bad.contains(key)).collect();
+    let false_positives: Vec<_> = banned
+        .iter()
+        .filter(|(key, _)| ips.good.contains(key))
+        .collect();
+    let false_negatives: Vec<_> = not_banned
+        .iter()
+        .filter(|(key, _)| ips.bad.contains(key))
+        .collect();
 
     let mut tw = tabwriter::TabWriter::new(Vec::new());
-    tw.write_all(format!("Statistics:
+    tw.write_all(
+        format!(
+            "Statistics:
 
 Total ips\t{total}
 Listed ips\t{listed}\t{listed_p}%
 False positives\t{false_positives}\t{false_positives_p}%
 False negatives\t{false_negatives}\t{false_negatives_p}%",
-total=ips.len(),
-listed=banned.len(),
-listed_p=(banned.len() * 100) as f64 / ips.len() as f64,
-false_positives=false_positives.len(),
-false_positives_p=(false_positives.len() * 100) as f64 / ips.good.len() as f64,
-false_negatives=false_negatives.len(),
-false_negatives_p=(false_negatives.len() * 100) as f64 / ips.bad.len() as f64,
-).as_bytes()).unwrap();
+            total = ips.len(),
+            listed = banned.len(),
+            listed_p = (banned.len() * 100) as f64 / ips.len() as f64,
+            false_positives = false_positives.len(),
+            false_positives_p = (false_positives.len() * 100) as f64 / ips.good.len() as f64,
+            false_negatives = false_negatives.len(),
+            false_negatives_p = (false_negatives.len() * 100) as f64 / ips.bad.len() as f64,
+        )
+        .as_bytes(),
+    )
+    .unwrap();
     println!("{}", String::from_utf8(tw.into_inner().unwrap()).unwrap());
 
     if debug {
-        println!("\nFalse positive ips:\n{}", false_positives.iter().map(|(ip, _)| ip.to_string()).collect::<Vec<_>>().join("\n"));
+        println!(
+            "\nFalse positive ips:\n{}",
+            false_positives
+                .iter()
+                .map(|(ip, _)| ip.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
     }
 }

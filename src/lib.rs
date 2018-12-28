@@ -1,5 +1,5 @@
-use std::fmt;
 use serde_derive::Deserialize;
+use std::fmt;
 use std::net::IpAddr;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
@@ -35,7 +35,15 @@ impl fmt::Display for CheckResult {
         if self.reason != "" {
             write!(f, "{} ", self.reason)?;
         }
-	write!(f, "({})", self.records.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","))
+        write!(
+            f,
+            "({})",
+            self.records
+                .iter()
+                .map(|r| r.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     }
 }
 
@@ -114,9 +122,10 @@ impl DNSBL {
 
         // if the dnsbl is configured to only respect certain records, filter now
         if self.records.len() > 0 {
-            records = records.into_iter().filter(|record| {
-                self.records.contains(record)
-            }).collect();
+            records = records
+                .into_iter()
+                .filter(|record| self.records.contains(record))
+                .collect();
         }
         if records.len() == 0 {
             // not listed
@@ -188,23 +197,26 @@ fn reverse_ip(ip: &IpAddr) -> String {
 
 #[cfg(test)]
 mod test {
+    use super::reverse_ip;
     use std::collections::HashMap;
     use std::net::IpAddr;
-    use super::reverse_ip;
     #[test]
     fn test_reverse_ips() {
-        let testcases: HashMap<_, _> =
-        [
+        let testcases: HashMap<_, _> = [
             ("1.2.3.4", "4.3.2.1"),
             ("127.0.0.1", "1.0.0.127"),
-            ("2001:DB8:abc:123::42", "2.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3.2.1.0.c.b.a.0.8.b.d.0.1.0.0.2"),
-        ].into_iter().cloned().collect();
+            (
+                "2001:DB8:abc:123::42",
+                "2.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3.2.1.0.c.b.a.0.8.b.d.0.1.0.0.2",
+            ),
+        ]
+        .into_iter()
+        .cloned()
+        .collect();
 
         for (ip, reversed) in testcases {
             let ip: IpAddr = ip.parse().expect(&format!("error parsing {}", ip));
             assert_eq!(reverse_ip(&ip), reversed);
         }
-
     }
 }
-
