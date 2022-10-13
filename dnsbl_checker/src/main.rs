@@ -176,7 +176,10 @@ fn main() -> Result<(), String> {
 
     let mut results: HashMap<std::net::IpAddr, Vec<(DNSBL, CheckResult)>> = Default::default();
 
-    for ip in input.ips.union() {
+    let mut last_percent = 0;
+    let all_ips = input.ips.union();
+    let len = all_ips.len();
+    for (i, ip) in all_ips.into_iter().enumerate() {
         let mut listings = Vec::new();
         for dnsbl in &input.dnsbls {
             let res = dnsbl
@@ -187,6 +190,10 @@ fn main() -> Result<(), String> {
             }
         }
         results.insert(*ip, listings);
+        if i * 100 / len > last_percent {
+            println!("Progress: {}%", i * 100 / len);
+            last_percent = i * 100 / len;
+        }
     }
     print_stats(debug, &input.ips, results);
 
